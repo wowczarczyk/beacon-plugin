@@ -1,0 +1,11 @@
+name: BeaconPlugin
+version: 1.0.0
+main: com.noxar3s.BeaconPlugin
+description: Beacon in pairs plugin
+author: NoXAr3s
+website: https://papermc.io
+api-version: '1.21.4'
+commands:
+  startgame:
+    description: Starts the beacon game.
+    usage: /startgame
