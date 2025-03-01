@@ -18,6 +18,10 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scoreboard.*;
+
 import java.util.*;
 
 public class BeaconPlugin extends JavaPlugin implements Listener, CommandExecutor {
@@ -26,6 +30,10 @@ public class BeaconPlugin extends JavaPlugin implements Listener, CommandExecuto
     private final Map<UUID, Location> teamBeaconLocation = new HashMap<>();
     private boolean canPvP = false;
     private boolean beaconGiven = false;
+
+    private final Set<UUID> teamsPlacedBeacon = new HashSet<>(); // Track teams that placed a beacon
+    private ScoreboardManager scoreboardManager;
+    private Objective timerObjective;
 
     @Override
     public void onEnable() {
@@ -64,6 +72,27 @@ public class BeaconPlugin extends JavaPlugin implements Listener, CommandExecuto
     }
 
     @EventHandler
+    public void onBlockPlace(BlockPlaceEvent event) {
+        Player player = event.getPlayer();
+        if (event.getBlock().getType() == Material.BEACON) {
+            UUID teamId = getTeamId(player.getUniqueId());
+            if (!beaconGiven || teamsPlacedBeacon.contains(teamId)) {
+                event.setCancelled(true);
+                return;
+            }
+            // Check if the player is holding the beacon given by the plugin
+            ItemStack item = event.getItemInHand();
+            if (item.getType() == Material.BEACON) {
+                teamsPlacedBeacon.add(teamId);
+                registerBeaconPlacement(player.getUniqueId(), event.getBlock().getLocation());
+                player.sendMessage(ChatColor.GREEN + "Beacon placed! Protect it!");
+                // Remove the beacon from inventory
+                item.setAmount(item.getAmount() - 1);
+            }
+        }
+    }
+
+    @EventHandler
     public void onBlockBreak(BlockBreakEvent event) {
         // If a beacon is broken, check if it's a team's beacon
         if (event.getBlock().getType() == Material.BEACON) {
@@ -87,6 +116,27 @@ public class BeaconPlugin extends JavaPlugin implements Listener, CommandExecuto
         }
     }
 
+    private void startTimerScoreboard() {
+        scoreboardManager = Bukkit.getScoreboardManager();
+        Scoreboard board = scoreboardManager.getNewScoreboard();
+        timerObjective = board.registerNewObjective("timer", "dummy", ChatColor.BOLD + "Time Remaining");
+        timerObjective.setDisplaySlot(DisplaySlot.SIDEBAR);
+
+        new BukkitRunnable() {
+            int timeLeft = 20 * 60; // 20 minutes in seconds
+
+            @Override
+            public void run() {
+                if (timeLeft <= 0) {
+                    cancel();
+                    return;
+                }
+                timerObjective.getScore("Time: ").setScore(timeLeft);
+                timeLeft--;
+            }
+        }.runTaskTimer(this, 0, 20); // Update every second
+    }
+
     // --------------------------------------------------------------------------
     // Command: /startgame
     // --------------------------------------------------------------------------
@@ -107,33 +157,50 @@ public class BeaconPlugin extends JavaPlugin implements Listener, CommandExecuto
         return false;
     }
 
-    // --------------------------------------------------------------------------
-    // Logic for team assignments, game timers, giving beacons, etc.
-    // --------------------------------------------------------------------------
     private void assignToATeam(Player player) {
-        // Try to pair them with someone who doesn't have a partner yet
+        List<UUID> waitingPlayers = new ArrayList<>();
         for (Map.Entry<UUID, UUID> entry : teamPartners.entrySet()) {
             if (entry.getValue() == null) {
-                teamPartners.put(entry.getKey(), player.getUniqueId());
-                teamPartners.put(player.getUniqueId(), entry.getKey());
-                player.sendMessage(ChatColor.GREEN + "You joined a team with an existing player!");
-                return;
+                waitingPlayers.add(entry.getKey());
             }
         }
-        // If no existing partial team, create a new partial team
-        teamPartners.put(player.getUniqueId(), null);
-        player.sendMessage(ChatColor.GREEN + "Waiting for another player to join your team...");
+
+        if (!waitingPlayers.isEmpty()) {
+            UUID partnerId = waitingPlayers.get(0);
+            teamPartners.put(partnerId, player.getUniqueId());
+            teamPartners.put(player.getUniqueId(), partnerId);
+            Player partner = Bukkit.getPlayer(partnerId);
+            if (partner != null) {
+                partner.sendMessage(ChatColor.GREEN + "You've been paired with " + player.getName() + "!");
+                player.sendMessage(ChatColor.GREEN + "You've been paired with " + partner.getName() + "!");
+            }
+        } else {
+            teamPartners.put(player.getUniqueId(), null);
+            player.sendMessage(ChatColor.YELLOW + "Waiting for a partner...");
+        }
     }
 
     private void startGame(World world) {
-        // Example random teleport for each complete team
+        // Check all teams are paired
         for (UUID playerId : teamPartners.keySet()) {
-            Player player = Bukkit.getPlayer(playerId);
-            if (player != null) {
-                if (teamPartners.get(playerId) != null) {
-                    // Teleport each player to a random location within 1000 blocks of some center
+            if (teamPartners.get(playerId) == null) {
+                Bukkit.broadcastMessage(ChatColor.RED + "Cannot start: Unpaired players!");
+                return;
+            }
+        }
+
+        Set<UUID> processedTeams = new HashSet<>();
+        for (UUID playerId : teamPartners.keySet()) {
+            UUID teamId = getTeamId(playerId);
+            if (!processedTeams.contains(teamId)) {
+                processedTeams.add(teamId);
+                UUID partnerId = teamPartners.get(playerId);
+                Player player1 = Bukkit.getPlayer(playerId);
+                Player player2 = Bukkit.getPlayer(partnerId);
+                if (player1 != null && player2 != null) {
                     Location randomLoc = generateRandomLocation(world, 10000, 10000, 500);
-                    player.teleport(randomLoc);
+                    player1.teleport(randomLoc);
+                    player2.teleport(randomLoc.add(2, 0, 0)); // Offset to prevent suffocation
                 }
             }
         }
@@ -142,19 +209,22 @@ public class BeaconPlugin extends JavaPlugin implements Listener, CommandExecuto
         canPvP = false;
         beaconGiven = false;
 
-        // 1. After 5 minutes, allow PvP and give beacons
+        // Start timers and scoreboard
+        startTimerScoreboard();
+
+        // 5-minute PvP/beacon timer
         getServer().getScheduler().runTaskLater(this, () -> {
             canPvP = true;
             beaconGiven = true;
             giveBeaconsToTeams();
             Bukkit.broadcastMessage(ChatColor.RED + "PvP is now enabled! You have 15 minutes to place your beacons.");
-        }, 5L * 60L * 20L); // 5 minutes in ticks
+        }, 5L * 60L * 20L);
 
-        // 2. After a total of 20 minutes, disqualify teams without a beacon
+        // 20-minute disqualification timer
         getServer().getScheduler().runTaskLater(this, () -> {
             disqualifyTeamsWithoutBeacon();
             Bukkit.broadcastMessage(ChatColor.YELLOW + "Time is up! Teams without placed beacons are disqualified.");
-        }, (5L + 15L) * 60L * 20L); // 20 minutes total in ticks
+        }, (5L + 15L) * 60L * 20L);
     }
 
     private void giveBeaconsToTeams() {
@@ -173,21 +243,22 @@ public class BeaconPlugin extends JavaPlugin implements Listener, CommandExecuto
     }
 
     private void disqualifyTeamsWithoutBeacon() {
-        // Disqualify (for example, kick) teams that never placed a beacon
-        List<UUID> toDisqualify = new ArrayList<>();
-
+        Set<UUID> disqualifiedTeams = new HashSet<>();
         for (UUID playerId : teamPartners.keySet()) {
             UUID teamId = getTeamId(playerId);
-            if (!teamBeaconLocation.containsKey(teamId)) {
-                toDisqualify.add(playerId);
+            if (!teamsPlacedBeacon.contains(teamId)) {
+                disqualifiedTeams.add(teamId);
             }
         }
 
-        for (UUID d : toDisqualify) {
-            Player p = Bukkit.getPlayer(d);
-            if (p != null) {
-                p.sendMessage(ChatColor.RED + "Your team did not place a beacon. You are disqualified!");
-                p.kickPlayer("Disqualified (No beacon placed)");
+        for (UUID teamId : disqualifiedTeams) {
+            for (UUID playerId : teamPartners.keySet()) {
+                if (getTeamId(playerId).equals(teamId)) {
+                    Player p = Bukkit.getPlayer(playerId);
+                    if (p != null) {
+                        p.kickPlayer(ChatColor.RED + "No beacon placed. Disqualified!");
+                    }
+                }
             }
         }
     }
