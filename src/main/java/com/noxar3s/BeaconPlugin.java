@@ -39,11 +39,12 @@ public class BeaconPlugin extends JavaPlugin implements Listener, CommandExecuto
     public void onEnable() {
         Bukkit.getPluginManager().registerEvents(this, this);
 
-        // Safely register the command
+        // Register commands
         if (this.getCommand("startgame") != null) {
             Objects.requireNonNull(this.getCommand("startgame")).setExecutor(this);
-        } else {
-            getLogger().severe("Command 'startgame' not found in plugin.yml. Plugin may not function correctly!");
+        }
+        if (this.getCommand("giveweapons") != null) {
+            Objects.requireNonNull(this.getCommand("giveweapons")).setExecutor(this);
         }
 
         getLogger().info("BeaconPairsPlugin (Paper) enabled!");
@@ -153,8 +154,37 @@ public class BeaconPlugin extends JavaPlugin implements Listener, CommandExecuto
             Player p = (Player) sender;
             startGame(p.getWorld());
             return true;
+        } else if (label.equalsIgnoreCase("giveweapons")) {
+            if (!sender.hasPermission("beaconplugin.giveweapons")) {
+                sender.sendMessage(ChatColor.RED + "You don't have permission to use this command!");
+                return true;
+            }
+
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                giveRandomWeapon(player);
+            }
+            sender.sendMessage(ChatColor.GREEN + "Random weapons distributed to all players!");
+            return true;
         }
         return false;
+    }
+
+    private void giveRandomWeapon(Player player) {
+        Material[] weapons = {
+                Material.WOODEN_SWORD,
+                Material.STONE_SWORD,
+                Material.IRON_SWORD,
+                Material.DIAMOND_SWORD,
+                Material.NETHERITE_SWORD,
+                Material.BOW,
+                Material.CROSSBOW
+        };
+
+        int randomIndex = new Random().nextInt(weapons.length);
+        ItemStack weapon = new ItemStack(weapons[randomIndex]);
+        player.getInventory().addItem(weapon);
+        player.sendMessage(ChatColor.GREEN + "You received a "
+                + weapon.getType().toString().toLowerCase().replace('_', ' ') + "!");
     }
 
     private void assignToATeam(Player player) {

@@ -9,3 +9,15 @@ commands:
   startgame:
     description: Starts the beacon game.
     usage: /startgame
+    permission: beaconplugin.startgame
+  giveweapons:
+    description: Gives random weapons to all players
+    usage: /giveweapons
+    permission: beaconplugin.giveweapons
+permissions:
+  beaconplugin.startgame:
+    description: Allows starting the game
+    default: op
+  beaconplugin.giveweapons:
+    description: Allows giving weapons to all players
+    default: op
