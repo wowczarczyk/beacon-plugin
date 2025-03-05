@@ -13,3 +13,4 @@ ENV OPS=NoXAr3s
 # Replace 'BeaconPairsPlugin.jar' with the name of your JAR
 # COPY target/BeaconPairsPlugin.jar /plugins/BeaconPairsPlugin.jar
 COPY AwakenSMPOnline-1.6.4.jar /plugins/AwakenSMPOnline.jar
+COPY grimac-2.3.69.jar /plugins/grimac.jar
