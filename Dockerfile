@@ -16,3 +16,4 @@ ENV MOTD=§5GammaSMP\n§cAwakenSMP server by NoXAr3s
 # COPY target/BeaconPairsPlugin.jar /plugins/BeaconPairsPlugin.jar
 COPY AwakenSMPOnline-1.6.4.jar /plugins/AwakenSMPOnline.jar
 COPY grimac-2.3.69.jar /plugins/grimac.jar
+COPY gamma_icon.png /data/server-icon.png
