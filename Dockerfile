@@ -8,6 +8,8 @@ ENV EULA=TRUE
 ENV VERSION=1.20.4
 # Add your Minecraft username to ops list
 ENV OPS=NoXAr3s
+# Set server name (purple) and description (red)
+ENV MOTD=§5GammaSMP\n§cAwakenSMP server by NoXAr3s
 
 # Example: Copy your plugin JAR into the plugins directory
 # Replace 'BeaconPairsPlugin.jar' with the name of your JAR
