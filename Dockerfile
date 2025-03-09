@@ -10,6 +10,10 @@ ENV VERSION=1.20.4
 ENV OPS=NoXAr3s
 # Set server name (purple) and description (red)
 ENV MOTD="§5GammaSMP\n§cAwakenSMP server by NoXAr3s"
+# Set optimized Java arguments
+ENV JVM_OPTS="-Xms4G -Xmx6G -XX:+UseG1GC -XX:+UnlockExperimentalVMOptions -XX:MaxGCPauseMillis=50 -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1HeapRegionSize=32M"
+# Set view distance
+ENV VIEW_DISTANCE=6
 
 # Example: Copy your plugin JAR into the plugins directory
 # Replace 'BeaconPairsPlugin.jar' with the name of your JAR
